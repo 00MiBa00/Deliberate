@@ -74,8 +74,14 @@ class DecisionRepository {
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
   }
 
-  Stream<List<Decision>> watchAllDecisions() {
-    return box.watch().map((_) => getAllDecisions());
+  Stream<List<Decision>> watchAllDecisions() async* {
+    // Сначала отдаем текущие данные
+    yield getAllDecisions();
+    
+    // Затем слушаем изменения
+    await for (final _ in box.watch()) {
+      yield getAllDecisions();
+    }
   }
 
   Future<void> close() async {
