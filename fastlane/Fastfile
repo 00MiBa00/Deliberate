@@ -215,7 +215,18 @@ desc "Sync codesigning certificates for Build"
       UI.message("Failed to update Info.plist: #{ex.message}")
     end
 
-    sh("flutter build ipa --release --export-options-plist=#{export_options_path} --build-number=#{safe_build_number} --no-tree-shake-icons")
+    # Build Flutter artifacts without signing, then archive/export via gym to control signing
+    sh("flutter build ios --release --no-codesign --build-number=#{safe_build_number} --no-tree-shake-icons")
+
+    build_app(
+      workspace: "ios/Runner.xcworkspace",
+      scheme: "Runner",
+      configuration: "Release",
+      export_method: "app-store",
+      export_options: export_options,
+      output_directory: File.expand_path("../build/ios/ipa", __dir__),
+      xcargs: "DEVELOPMENT_TEAM=#{ENV['APPLE_TEAM_ID']} PROVISIONING_PROFILE_SPECIFIER='#{main_profile}' CODE_SIGN_STYLE=Manual"
+    )
     
     # Find the built IPA file with absolute path
     ipa_path = Dir.glob(File.expand_path("../build/ios/ipa/*.ipa", __dir__)).first
