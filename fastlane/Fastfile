@@ -33,10 +33,23 @@ platform :ios do
     env_bundle_id
   end
 
-  def install_profile_for_bundle(bundle_id)
-    require "fileutils"
+  def profile_uuid_from_path(profile_path)
     require "open3"
     require "plist"
+
+    stdout, stderr, status = Open3.capture3("/usr/bin/security", "cms", "-D", "-i", profile_path)
+    if status.success?
+      parsed = Plist.parse_xml(stdout)
+      return parsed["UUID"] if parsed
+    else
+      UI.message("Failed to read provisioning profile UUID: #{stderr}")
+    end
+
+    nil
+  end
+
+  def install_profile_for_bundle(bundle_id)
+    require "fileutils"
 
     profile_path = ENV["sigh_#{bundle_id}_appstore_profile-path"]
     return if profile_path.nil? || profile_path.empty?
@@ -44,19 +57,7 @@ platform :ios do
     if File.exist?(profile_path)
       install_provisioning_profile(path: profile_path)
       profile_uuid = ENV["sigh_#{bundle_id}_appstore_profile-uuid"]
-      if profile_uuid.nil? || profile_uuid.empty?
-        stdout, stderr, status = Open3.capture3("/usr/bin/security", "cms", "-D", "-i", profile_path)
-        if status.success?
-          begin
-            parsed = Plist.parse_xml(stdout)
-            profile_uuid = parsed["UUID"] if parsed
-          rescue => ex
-            UI.message("Failed to parse provisioning profile UUID: #{ex.message}")
-          end
-        else
-          UI.message("Failed to read provisioning profile UUID: #{stderr}")
-        end
-      end
+      profile_uuid = profile_uuid_from_path(profile_path) if profile_uuid.nil? || profile_uuid.empty?
       mobile_device_dir = File.expand_path("~/Library/MobileDevice/Provisioning Profiles")
       FileUtils.mkdir_p(mobile_device_dir)
 
@@ -72,7 +73,13 @@ platform :ios do
   end
 
   def resolve_profile_uuid(bundle_id)
-    ENV["sigh_#{bundle_id}_appstore_profile-uuid"]
+    uuid = ENV["sigh_#{bundle_id}_appstore_profile-uuid"]
+    return uuid if uuid && !uuid.empty?
+
+    profile_path = ENV["sigh_#{bundle_id}_appstore_profile-path"]
+    return nil if profile_path.nil? || profile_path.empty? || !File.exist?(profile_path)
+
+    profile_uuid_from_path(profile_path)
   end
 
   def apply_runner_signing_settings(project_path:, bundle_id:, team_id:, profile_name:, profile_uuid: nil)
@@ -191,6 +198,8 @@ desc "Sync codesigning certificates for Build"
     main_profile = profile_mapping[main_app_bundle_id] || ENV["sigh_#{main_app_bundle_id}_appstore_profile-name"]
     UI.user_error!("No provisioning profile found for #{main_app_bundle_id}") if main_profile.nil? || main_profile.empty?
 
+    install_profile_for_bundle(main_app_bundle_id)
+
     main_profile_uuid = resolve_profile_uuid(main_app_bundle_id)
 
     apply_runner_signing_settings(
@@ -200,8 +209,6 @@ desc "Sync codesigning certificates for Build"
       profile_name: main_profile,
       profile_uuid: main_profile_uuid
     )
-
-    install_profile_for_bundle(main_app_bundle_id)
     
     # Update ExportOptions.plist with Match provisioning profiles
     export_options_path = File.expand_path("../ios/ExportOptions.plist", __dir__)
