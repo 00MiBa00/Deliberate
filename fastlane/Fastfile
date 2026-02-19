@@ -8,7 +8,10 @@ platform :ios do
   def resolve_bundle_id(xcodeproj_path:, target_name:, configuration: "Release")
     require "xcodeproj"
 
-    project = Xcodeproj::Project.open(xcodeproj_path)
+    project_root = File.expand_path("..", __dir__)
+    project_path = File.expand_path(xcodeproj_path, project_root)
+    UI.user_error!("Xcode project not found at #{project_path}") unless File.exist?(project_path)
+    project = Xcodeproj::Project.open(project_path)
     target = project.targets.find { |t| t.name == target_name }
 
     project_bundle_id = nil
@@ -54,6 +57,7 @@ platform :ios do
       xcodeproj_path: "ios/Runner.xcodeproj",
       target_name: "Runner"
     )
+    UI.user_error!("Failed to resolve main app bundle id") if main_app_bundle_id.nil? || main_app_bundle_id.empty?
 
     notification_bundle_id = ENV["IOS_NOTIFICATIONS_BUNDLE_ID"]
 
@@ -81,6 +85,7 @@ desc "Sync codesigning certificates for Build"
       xcodeproj_path: "ios/Runner.xcodeproj",
       target_name: "Runner"
     )
+    UI.user_error!("Failed to resolve main app bundle id") if main_app_bundle_id.nil? || main_app_bundle_id.empty?
 
     notification_bundle_id = ENV["IOS_NOTIFICATIONS_BUNDLE_ID"]
 
@@ -109,9 +114,11 @@ desc "Sync codesigning certificates for Build"
       xcodeproj_path: "ios/Runner.xcodeproj",
       target_name: "Runner"
     )
+    UI.user_error!("Failed to resolve main app bundle id") if main_app_bundle_id.nil? || main_app_bundle_id.empty?
 
     profile_mapping = lane_context[SharedValues::MATCH_PROVISIONING_PROFILE_MAPPING] || {}
     main_profile = profile_mapping[main_app_bundle_id] || ENV["sigh_#{main_app_bundle_id}_appstore_profile-name"]
+    UI.user_error!("No provisioning profile found for #{main_app_bundle_id}") if main_profile.nil? || main_profile.empty?
 
     update_code_signing_settings(
       use_automatic_signing: false,
@@ -129,6 +136,7 @@ desc "Sync codesigning certificates for Build"
     # Get provisioning profile names from Match
     profile_mapping = lane_context[SharedValues::MATCH_PROVISIONING_PROFILE_MAPPING] || {}
     main_profile = profile_mapping[main_app_bundle_id] || ENV["sigh_#{main_app_bundle_id}_appstore_profile-name"]
+    UI.user_error!("No provisioning profile found for #{main_app_bundle_id}") if main_profile.nil? || main_profile.empty?
     
     # Read, update and write ExportOptions.plist
     require 'plist'
@@ -188,7 +196,7 @@ desc "Sync codesigning certificates for Build"
       UI.message("Failed to update Info.plist: #{ex.message}")
     end
 
-  sh("flutter build ipa --release --export-options-plist=#{export_options_path} --build-number=#{safe_build_number} --no-tree-shake-icons")
+    sh("flutter build ipa --release --export-options-plist=#{export_options_path} --build-number=#{safe_build_number} --no-tree-shake-icons")
     
     # Find the built IPA file with absolute path
     ipa_path = Dir.glob(File.expand_path("../build/ios/ipa/*.ipa", __dir__)).first
