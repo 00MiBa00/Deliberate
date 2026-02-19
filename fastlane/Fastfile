@@ -32,6 +32,17 @@ platform :ios do
 
     env_bundle_id
   end
+
+  def install_profile_for_bundle(bundle_id)
+    profile_path = ENV["sigh_#{bundle_id}_appstore_profile-path"]
+    return if profile_path.nil? || profile_path.empty?
+
+    if File.exist?(profile_path)
+      install_provisioning_profile(path: profile_path)
+    else
+      UI.message("Provisioning profile not found at #{profile_path}, skipping install")
+    end
+  end
   
   lane :init_ci do
     github_action(
@@ -71,6 +82,8 @@ platform :ios do
       app_identifier: app_identifiers,
       api_key: api_key
     )
+
+    install_profile_for_bundle(main_app_bundle_id)
   end
 
 desc "Sync codesigning certificates for Build"
@@ -100,6 +113,8 @@ desc "Sync codesigning certificates for Build"
       readonly: false,
       api_key: api_key
     )
+
+    install_profile_for_bundle(main_app_bundle_id)
   end
 
   desc "Build and upload to TestFlight"
@@ -129,6 +144,8 @@ desc "Sync codesigning certificates for Build"
       profile_name: main_profile,
       code_sign_identity: "Apple Distribution"
     )
+
+    install_profile_for_bundle(main_app_bundle_id)
     
     # Update ExportOptions.plist with Match provisioning profiles
     export_options_path = File.expand_path("../ios/ExportOptions.plist", __dir__)
@@ -160,6 +177,8 @@ desc "Sync codesigning certificates for Build"
     export_options['provisioningProfiles'] = {
       main_app_bundle_id => main_profile
     }
+
+    export_options['signingStyle'] = 'manual'
 
     File.write(export_options_path, export_options.to_plist)
     
