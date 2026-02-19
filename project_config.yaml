@@ -2,11 +2,11 @@
 # Измените значения ниже перед запуском make setup
 
 # Название приложения (отображается на экране устройства)
-app_name: "Tasty chicken lab"
+app_name: "Delibaretel"
 
 # Bundle ID приложения (уникальный идентификатор в App Store)
 # Формат: com.company.appname
-bundle_id: "com.tasty-chicken.chicken-lab"
+bundle_id: "com.idtcapturebv.appdeliberate"
 
 # Путь к иконке приложения (1024x1024 PNG файл)
 # Можно использовать абсолютный или относительный путь
@@ -14,7 +14,7 @@ icon_path: "assets/images/Icon.png"
 
 # Team ID для подписи (опционально)
 # Можно найти в Apple Developer Portal
-team_id: ""
+team_id: "32UDJVCUGN"
 
 # Версия приложения
 app_version: "1.0.0"
