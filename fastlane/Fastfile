@@ -231,7 +231,7 @@ desc "Sync codesigning certificates for Build"
       export_method: "app-store",
       export_options: export_options,
       output_directory: File.expand_path("../build/ios/ipa", __dir__),
-      xcargs: "DEVELOPMENT_TEAM=#{ENV['APPLE_TEAM_ID']} PROVISIONING_PROFILE_SPECIFIER='#{main_profile}' PROVISIONING_PROFILE='#{main_profile_uuid}' CODE_SIGN_STYLE=Manual"
+      xcargs: "DEVELOPMENT_TEAM=#{ENV['APPLE_TEAM_ID']} PROVISIONING_PROFILE_SPECIFIER= PROVISIONING_PROFILE=#{main_profile_uuid} CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=Apple\ Distribution"
     )
     
     # Find the built IPA file with absolute path
