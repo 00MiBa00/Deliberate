@@ -1,12 +1,14 @@
 # Fastfile for Flutter iOS CI/CD
 
+opt_out_usage
+
 org, repo = (ENV["GITHUB_REPOSITORY"] || "").split("/")
 match_org, match_repo = (ENV["MATCH_REPOSITORY"] || "").split("/")
 
 platform :ios do
 
   #########################################################
-  # Init CI (temporary keychain)
+  # Init CI (temporary keychain for GitHub Actions)
   #########################################################
   lane :init_ci do
     github_action(
@@ -20,30 +22,30 @@ platform :ios do
   end
 
   #########################################################
-  # Sync certificates
+  # Sync certificates using Match
   #########################################################
   desc "Sync codesigning certificates"
   lane :sync_certificates do
     api_key = app_store_connect_api_key(
       key_id: ENV["APPSTORE_KEY_ID"],
       issuer_id: ENV["APPSTORE_ISSUER_ID"],
-      key_content: ENV['APPSTORE_P8']
+      key_content: ENV["APPSTORE_P8"]
     )
 
-    main_app_bundle_id = ENV["IOS_BUNDLE_ID"]
-    extension_bundle_id = "#{main_app_bundle_id}.notifications"
+    main_bundle = ENV["IOS_BUNDLE_ID"]
+    extension_bundle = "#{main_bundle}.notifications"
 
     match(
       type: "appstore",
       storage_mode: "git",
       git_url: "git@github.com:#{match_org}/#{match_repo}.git",
-      app_identifier: [main_app_bundle_id, extension_bundle_id],
+      app_identifier: [main_bundle, extension_bundle],
       api_key: api_key
     )
   end
 
   #########################################################
-  # Build & Upload
+  # Build and upload to TestFlight
   #########################################################
   desc "Build and upload to TestFlight"
   lane :beta do
@@ -54,9 +56,9 @@ platform :ios do
     ios_path = File.join(project_root, "ios")
     build_path = File.join(project_root, "build")
 
-    ###########################################
+    #######################################################
     # Prepare ExportOptions.plist
-    ###########################################
+    #######################################################
     export_options_path = File.join(ios_path, "ExportOptions.plist")
 
     main_profile = ENV["sigh_#{ENV['IOS_BUNDLE_ID']}_appstore_profile-name"]
@@ -83,24 +85,40 @@ platform :ios do
 
     File.write(export_options_path, export_options.to_plist)
 
-    ###########################################
-    # Build number
-    ###########################################
+    #######################################################
+    # Safe build number (unique)
+    #######################################################
     build_number = Time.now.to_i.to_s
     UI.message("Using build number: #{build_number}")
 
-    ###########################################
+    #######################################################
     # Clean & Build
-    ###########################################
+    #######################################################
     sh "flutter clean", chdir: project_root
     sh "flutter pub get", chdir: project_root
 
-    sh """
-      flutter build ipa \
-        --release \
-        --export-options-plist=#{export_options_path} \
-        --build-number=#{build_number} \
-        --no-tree-shake-icons
-    """, chdir: project_root
+    sh "flutter build ipa --release --export-options-plist=#{export_options_path} --build-number=#{build_number} --no-tree-shake-icons", chdir: project_root
 
-    ###
+    #######################################################
+    # Find IPA
+    #######################################################
+    ipa_path = Dir.glob(File.join(build_path, "ios/ipa/*.ipa")).first
+    UI.user_error!("No IPA file found at build/ios/ipa/") unless ipa_path
+
+    #######################################################
+    # Upload to TestFlight using API key
+    #######################################################
+    api_key = app_store_connect_api_key(
+      key_id: ENV["APPSTORE_KEY_ID"],
+      issuer_id: ENV["APPSTORE_ISSUER_ID"],
+      key_content: ENV["APPSTORE_P8"]
+    )
+
+    upload_to_testflight(
+      skip_waiting_for_build_processing: true,
+      ipa: ipa_path,
+      api_key: api_key
+    )
+  end
+
+end
