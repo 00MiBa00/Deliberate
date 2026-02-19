@@ -4,6 +4,19 @@ org, repo = (ENV["GITHUB_REPOSITORY"]||"").split("/")
 match_org, match_repo = (ENV["MATCH_REPOSITORY"]||"").split("/")
 
 platform :ios do
+
+  def resolve_bundle_id(xcodeproj_path:, target_name:, configuration: "Release")
+    env_bundle_id = ENV["IOS_BUNDLE_ID"]
+    return env_bundle_id if env_bundle_id && !env_bundle_id.empty?
+
+    settings = get_build_settings(
+      project: xcodeproj_path,
+      target: target_name,
+      configuration: configuration
+    )
+
+    settings["PRODUCT_BUNDLE_IDENTIFIER"]
+  end
   
   lane :init_ci do
     github_action(
@@ -25,14 +38,21 @@ platform :ios do
 
     )
 
-    main_app_bundle_id = ENV["IOS_BUNDLE_ID"]
-    extension_bundle_id = "#{ENV["IOS_BUNDLE_ID"]}.notifications"
+    main_app_bundle_id = resolve_bundle_id(
+      xcodeproj_path: "ios/Runner.xcodeproj",
+      target_name: "Runner"
+    )
+
+    notification_bundle_id = ENV["IOS_NOTIFICATIONS_BUNDLE_ID"]
+
+    app_identifiers = [main_app_bundle_id].compact
+    app_identifiers << notification_bundle_id if notification_bundle_id && !notification_bundle_id.empty?
 
     match(
       type: "appstore",
       storage_mode: "git",
       git_url: "git@github.com:#{match_org}/#{match_repo}.git",
-      app_identifier: [main_app_bundle_id, extension_bundle_id],
+      app_identifier: app_identifiers,
       api_key: api_key
     )
   end
@@ -45,14 +65,21 @@ desc "Sync codesigning certificates for Build"
       key_filepath: ENV["APP_STORE_CONNECT_API_KEY_PATH"]
     )
 
-    main_app_bundle_id = ENV["IOS_BUNDLE_ID"]
-    extension_bundle_id = "#{ENV["IOS_BUNDLE_ID"]}.notifications"
+    main_app_bundle_id = resolve_bundle_id(
+      xcodeproj_path: "ios/Runner.xcodeproj",
+      target_name: "Runner"
+    )
+
+    notification_bundle_id = ENV["IOS_NOTIFICATIONS_BUNDLE_ID"]
+
+    app_identifiers = [main_app_bundle_id].compact
+    app_identifiers << notification_bundle_id if notification_bundle_id && !notification_bundle_id.empty?
 
     match(
       type: "appstore",
       storage_mode: "git",
       git_url: "git@github.com:#{match_org}/#{match_repo}.git",
-      app_identifier: [main_app_bundle_id, extension_bundle_id],
+      app_identifier: app_identifiers,
       readonly: false,
       api_key: api_key
     )
@@ -66,23 +93,19 @@ desc "Sync codesigning certificates for Build"
     sync_certificates
     
     # Configure manual code signing for Xcode project
-    update_code_signing_settings(
-      use_automatic_signing: false,
-      path: "ios/Runner.xcodeproj",
-      team_id: ENV["APPLE_TEAM_ID"],
-      bundle_identifier: ENV["IOS_BUNDLE_ID"],
-      profile_name: ENV["sigh_#{ENV['IOS_BUNDLE_ID']}_appstore_profile-name"],
-      code_sign_identity: "Apple Distribution"
+    main_app_bundle_id = resolve_bundle_id(
+      xcodeproj_path: "ios/Runner.xcodeproj",
+      target_name: "Runner"
     )
-    
-    # # Configure manual code signing for notification extension
+
+    main_profile = ENV["sigh_#{main_app_bundle_id}_appstore_profile-name"]
+
     update_code_signing_settings(
       use_automatic_signing: false,
       path: "ios/Runner.xcodeproj",
-      targets: "notifications",
       team_id: ENV["APPLE_TEAM_ID"],
-      bundle_identifier: "#{ENV['IOS_BUNDLE_ID']}.notifications",
-      profile_name: ENV["sigh_#{ENV['IOS_BUNDLE_ID']}.notifications_appstore_profile-name"],
+      bundle_identifier: main_app_bundle_id,
+      profile_name: main_profile,
       code_sign_identity: "Apple Distribution"
     )
     
@@ -90,8 +113,7 @@ desc "Sync codesigning certificates for Build"
     export_options_path = File.expand_path("../ios/ExportOptions.plist", __dir__)
     
     # Get provisioning profile names from Match
-    main_profile = ENV["sigh_#{ENV['IOS_BUNDLE_ID']}_appstore_profile-name"]
-    # extension_profile = ENV["sigh_#{ENV['IOS_BUNDLE_ID']}.notifications_appstore_profile-name"]
+    main_profile = ENV["sigh_#{main_app_bundle_id}_appstore_profile-name"]
     
     # Read, update and write ExportOptions.plist
     require 'plist'
@@ -113,8 +135,7 @@ desc "Sync codesigning certificates for Build"
 
     # Populate provisioningProfiles mapping
     export_options['provisioningProfiles'] = {
-      ENV['IOS_BUNDLE_ID'] => main_profile
-      # "#{ENV['IOS_BUNDLE_ID']}.notifications" => extension_profile
+      main_app_bundle_id => main_profile
     }
 
     File.write(export_options_path, export_options.to_plist)
