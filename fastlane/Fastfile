@@ -6,13 +6,17 @@ match_org, match_repo = (ENV["MATCH_REPOSITORY"]||"").split("/")
 platform :ios do
 
   def resolve_bundle_id(xcodeproj_path:, target_name:, configuration: "Release")
-    settings = get_build_settings(
-      project: xcodeproj_path,
-      target: target_name,
-      configuration: configuration
-    )
+    require "xcodeproj"
 
-    project_bundle_id = settings["PRODUCT_BUNDLE_IDENTIFIER"]
+    project = Xcodeproj::Project.open(xcodeproj_path)
+    target = project.targets.find { |t| t.name == target_name }
+
+    project_bundle_id = nil
+    if target
+      config = target.build_configurations.find { |c| c.name == configuration }
+      project_bundle_id = config.build_settings["PRODUCT_BUNDLE_IDENTIFIER"] if config
+    end
+
     env_bundle_id = ENV["IOS_BUNDLE_ID"]
 
     return project_bundle_id if env_bundle_id.nil? || env_bundle_id.empty?
