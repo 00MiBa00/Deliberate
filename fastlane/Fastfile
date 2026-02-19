@@ -101,6 +101,7 @@ platform :ios do
 
       if profile_uuid && !profile_uuid.empty?
         settings["PROVISIONING_PROFILE"] = profile_uuid
+        settings["PROVISIONING_PROFILE_SPECIFIER"] = ""
       end
     end
 
@@ -199,6 +200,7 @@ platform :ios do
 
     install_profile_for_bundle(main_app_bundle_id)
     main_profile_uuid = resolve_profile_uuid(main_app_bundle_id)
+    UI.user_error!("Provisioning profile UUID not found for #{main_app_bundle_id}") if main_profile_uuid.nil? || main_profile_uuid.empty?
 
     apply_runner_signing_settings(
       project_path: File.expand_path("../ios/Runner.xcodeproj", __dir__),
