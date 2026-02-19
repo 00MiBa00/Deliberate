@@ -34,11 +34,21 @@ platform :ios do
   end
 
   def install_profile_for_bundle(bundle_id)
+    require "fileutils"
+
     profile_path = ENV["sigh_#{bundle_id}_appstore_profile-path"]
     return if profile_path.nil? || profile_path.empty?
 
     if File.exist?(profile_path)
       install_provisioning_profile(path: profile_path)
+      profile_uuid = ENV["sigh_#{bundle_id}_appstore_profile-uuid"]
+      mobile_device_dir = File.expand_path("~/Library/MobileDevice/Provisioning Profiles")
+      FileUtils.mkdir_p(mobile_device_dir)
+
+      if profile_uuid && !profile_uuid.empty?
+        target_path = File.join(mobile_device_dir, "#{profile_uuid}.mobileprovision")
+        FileUtils.cp(profile_path, target_path)
+      end
     else
       UI.message("Provisioning profile not found at #{profile_path}, skipping install")
     end
