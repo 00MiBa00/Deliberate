@@ -4,9 +4,9 @@ org, repo = (ENV["GITHUB_REPOSITORY"] || "").split("/")
 match_org, match_repo = (ENV["MATCH_REPOSITORY"] || "").split("/")
 
 platform :ios do
-  
+
   #########################################################
-  # Init CI (creates proper temporary keychain)
+  # Init CI (temporary keychain)
   #########################################################
   lane :init_ci do
     github_action(
@@ -18,9 +18,9 @@ platform :ios do
       writable_deploy_key: true
     )
   end
-  
+
   #########################################################
-  # Sync codesigning certificates
+  # Sync certificates
   #########################################################
   desc "Sync codesigning certificates"
   lane :sync_certificates do
@@ -43,26 +43,30 @@ platform :ios do
   end
 
   #########################################################
-  # Build and upload to TestFlight
+  # Build & Upload
   #########################################################
   desc "Build and upload to TestFlight"
   lane :beta do
     setup_ci
     sync_certificates
 
+    project_root = File.expand_path("..", __dir__)
+    ios_path = File.join(project_root, "ios")
+    build_path = File.join(project_root, "build")
+
     ###########################################
     # Prepare ExportOptions.plist
     ###########################################
-    export_options_path = File.expand_path("../ios/ExportOptions.plist", __dir__)
+    export_options_path = File.join(ios_path, "ExportOptions.plist")
 
     main_profile = ENV["sigh_#{ENV['IOS_BUNDLE_ID']}_appstore_profile-name"]
     extension_profile = ENV["sigh_#{ENV['IOS_BUNDLE_ID']}.notifications_appstore_profile-name"]
 
     require 'plist'
-    export_options = Plist.parse_xml(export_options_path)
+    export_options = File.exist?(export_options_path) ? Plist.parse_xml(export_options_path) : nil
 
     if export_options.nil?
-      UI.message("ExportOptions.plist missing or invalid. Creating minimal config.")
+      UI.message("Creating minimal ExportOptions.plist")
       export_options = {
         'method' => 'app-store',
         'teamID' => ENV['APPLE_TEAM_ID'],
@@ -72,7 +76,6 @@ platform :ios do
 
     export_options['method'] = 'app-store'
     export_options['teamID'] = ENV['APPLE_TEAM_ID']
-
     export_options['provisioningProfiles'] = {
       ENV['IOS_BUNDLE_ID'] => main_profile,
       "#{ENV['IOS_BUNDLE_ID']}.notifications" => extension_profile
@@ -81,7 +84,7 @@ platform :ios do
     File.write(export_options_path, export_options.to_plist)
 
     ###########################################
-    # Safe build number
+    # Build number
     ###########################################
     build_number = Time.now.to_i.to_s
     UI.message("Using build number: #{build_number}")
@@ -89,13 +92,8 @@ platform :ios do
     ###########################################
     # Clean & Build
     ###########################################
-    sh "flutter clean"
-    sh "flutter pub get"
-
-    project_root = File.expand_path("..", __dir__)
-    ios_path = File.join(project_root, "ios")
-
-    sh "pod install --repo-update", chdir: ios_path
+    sh "flutter clean", chdir: project_root
+    sh "flutter pub get", chdir: project_root
 
     sh """
       flutter build ipa \
@@ -103,18 +101,6 @@ platform :ios do
         --export-options-plist=#{export_options_path} \
         --build-number=#{build_number} \
         --no-tree-shake-icons
-    """
+    """, chdir: project_root
 
-    ###########################################
-    # Upload IPA
-    ###########################################
-    ipa_path = Dir.glob(File.expand_path("../build/ios/ipa/*.ipa", __dir__)).first
-    UI.user_error!("No IPA file found at build/ios/ipa/") unless ipa_path
-
-    upload_to_testflight(
-      skip_waiting_for_build_processing: true,
-      ipa: ipa_path
-    )
-  end
-
-end
+    ###
