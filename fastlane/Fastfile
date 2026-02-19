@@ -91,7 +91,11 @@ platform :ios do
     ###########################################
     sh "flutter clean"
     sh "flutter pub get"
-    sh "pod install --repo-update --project-directory=ios"
+
+    project_root = File.expand_path("..", __dir__)
+    ios_path = File.join(project_root, "ios")
+
+    sh "pod install --repo-update", chdir: ios_path
 
     sh """
       flutter build ipa \
